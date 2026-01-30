@@ -1,0 +1,695 @@
+openapi: 3.1.0
+info:
+  title: 예산 집행 현황 대시보드 API
+  description: 예산 집행 현황 조회, 시각화, 예측 분석을 위한 REST API
+  version: 1.0.0
+
+servers:
+  - url: /api/v1
+    description: API 서버
+
+tags:
+  - name: Dashboard
+    description: 대시보드 요약 데이터
+  - name: Budgets
+    description: 예산 항목 관리
+  - name: Executions
+    description: 집행 내역 관리
+  - name: Departments
+    description: 부서 관리
+  - name: Forecasts
+    description: 예산 예측 분석
+  - name: Integrity
+    description: 데이터 무결성 검증
+
+paths:
+  /dashboard/summary:
+    get:
+      tags: [Dashboard]
+      summary: 대시보드 요약 정보 조회
+      description: 전체 예산 대비 집행 현황, 부서별 요약 등 대시보드 메인 데이터
+      parameters:
+        - name: fiscal_year
+          in: query
+          required: true
+          schema:
+            type: integer
+            example: 2026
+      responses:
+        '200':
+          description: 대시보드 요약 데이터
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardSummary'
+
+  /budgets:
+    get:
+      tags: [Budgets]
+      summary: 예산 항목 목록 조회
+      parameters:
+        - name: fiscal_year
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: department_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        '200':
+          description: 예산 항목 목록
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetItemList'
+
+  /budgets/{budget_id}:
+    get:
+      tags: [Budgets]
+      summary: 예산 항목 상세 조회
+      parameters:
+        - name: budget_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 예산 항목 상세 정보
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetItemDetail'
+        '404':
+          description: 예산 항목을 찾을 수 없음
+
+  /budgets/{budget_id}/executions:
+    get:
+      tags: [Executions]
+      summary: 예산 항목별 집행 내역 조회
+      parameters:
+        - name: budget_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: start_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: end_date
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: 집행 내역 목록
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionRecordList'
+
+  /departments:
+    get:
+      tags: [Departments]
+      summary: 부서 목록 조회
+      parameters:
+        - name: include_hierarchy
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: 부서 목록
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepartmentList'
+
+  /departments/{department_id}/summary:
+    get:
+      tags: [Departments]
+      summary: 부서별 예산 요약 조회
+      parameters:
+        - name: department_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: fiscal_year
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 부서 예산 요약
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepartmentBudgetSummary'
+
+  /charts/execution-trend:
+    get:
+      tags: [Dashboard]
+      summary: 월별 집행 추세 데이터
+      parameters:
+        - name: fiscal_year
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: department_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 월별 집행 추세 차트 데이터
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionTrendData'
+
+  /charts/department-distribution:
+    get:
+      tags: [Dashboard]
+      summary: 부서별 집행 분포 데이터 (원형 차트용)
+      parameters:
+        - name: fiscal_year
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 부서별 집행 분포 데이터
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepartmentDistributionData'
+
+  /forecasts:
+    post:
+      tags: [Forecasts]
+      summary: 예측 분석 실행
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForecastRequest'
+      responses:
+        '200':
+          description: 예측 결과
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForecastResult'
+        '400':
+          description: 예측 불가 (데이터 부족 등)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForecastError'
+
+  /forecasts/{budget_id}:
+    get:
+      tags: [Forecasts]
+      summary: 저장된 예측 결과 조회
+      parameters:
+        - name: budget_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: scenario
+          in: query
+          schema:
+            type: string
+            enum: [REALISTIC, OPTIMISTIC, CONSERVATIVE]
+      responses:
+        '200':
+          description: 예측 결과 목록
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForecastResultList'
+
+  /integrity/check:
+    post:
+      tags: [Integrity]
+      summary: 데이터 무결성 검증 실행
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fiscal_year:
+                  type: integer
+                department_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: 무결성 검증 결과
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IntegrityCheckResult'
+
+components:
+  schemas:
+    DashboardSummary:
+      type: object
+      required:
+        - fiscal_year
+        - total_allocated
+        - total_executed
+        - total_remaining
+        - execution_rate
+        - department_summaries
+        - last_updated
+      properties:
+        fiscal_year:
+          type: integer
+        total_allocated:
+          type: number
+          format: decimal
+          description: 전체 배정 예산
+        total_executed:
+          type: number
+          format: decimal
+          description: 전체 집행 금액
+        total_remaining:
+          type: number
+          format: decimal
+          description: 전체 잔액
+        execution_rate:
+          type: number
+          format: float
+          description: 집행률 (%)
+        department_summaries:
+          type: array
+          items:
+            $ref: '#/components/schemas/DepartmentBudgetSummary'
+        alerts:
+          type: array
+          items:
+            $ref: '#/components/schemas/BudgetAlert'
+        last_updated:
+          type: string
+          format: date-time
+
+    BudgetItemList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/BudgetItemSummary'
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    BudgetItemSummary:
+      type: object
+      required:
+        - id
+        - code
+        - name
+        - allocated_amount
+        - executed_amount
+        - remaining_amount
+        - execution_rate
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        department_name:
+          type: string
+        allocated_amount:
+          type: number
+          format: decimal
+        executed_amount:
+          type: number
+          format: decimal
+        remaining_amount:
+          type: number
+          format: decimal
+        execution_rate:
+          type: number
+          format: float
+
+    BudgetItemDetail:
+      allOf:
+        - $ref: '#/components/schemas/BudgetItemSummary'
+        - type: object
+          properties:
+            fiscal_year:
+              type: integer
+            department:
+              $ref: '#/components/schemas/Department'
+            recent_executions:
+              type: array
+              items:
+                $ref: '#/components/schemas/ExecutionRecord'
+            monthly_trend:
+              type: array
+              items:
+                $ref: '#/components/schemas/MonthlyExecution'
+
+    ExecutionRecord:
+      type: object
+      required:
+        - id
+        - execution_date
+        - amount
+        - description
+        - approved_by
+      properties:
+        id:
+          type: string
+          format: uuid
+        budget_item_id:
+          type: string
+          format: uuid
+        execution_date:
+          type: string
+          format: date
+        amount:
+          type: number
+          format: decimal
+        description:
+          type: string
+        approved_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    ExecutionRecordList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExecutionRecord'
+        total_amount:
+          type: number
+          format: decimal
+
+    Department:
+      type: object
+      required:
+        - id
+        - code
+        - name
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        parent_id:
+          type: string
+          format: uuid
+        budget_manager:
+          type: string
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/Department'
+
+    DepartmentList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Department'
+
+    DepartmentBudgetSummary:
+      type: object
+      required:
+        - department_id
+        - department_name
+        - allocated_amount
+        - executed_amount
+        - execution_rate
+      properties:
+        department_id:
+          type: string
+          format: uuid
+        department_name:
+          type: string
+        allocated_amount:
+          type: number
+          format: decimal
+        executed_amount:
+          type: number
+          format: decimal
+        remaining_amount:
+          type: number
+          format: decimal
+        execution_rate:
+          type: number
+          format: float
+        budget_item_count:
+          type: integer
+
+    ExecutionTrendData:
+      type: object
+      properties:
+        months:
+          type: array
+          items:
+            type: string
+            example: "2026-01"
+        executed_amounts:
+          type: array
+          items:
+            type: number
+            format: decimal
+        cumulative_amounts:
+          type: array
+          items:
+            type: number
+            format: decimal
+
+    DepartmentDistributionData:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              department_name:
+                type: string
+              executed_amount:
+                type: number
+                format: decimal
+              percentage:
+                type: number
+                format: float
+
+    MonthlyExecution:
+      type: object
+      properties:
+        month:
+          type: string
+          example: "2026-01"
+        executed_amount:
+          type: number
+          format: decimal
+        record_count:
+          type: integer
+
+    ForecastRequest:
+      type: object
+      required:
+        - budget_item_id
+        - forecast_months
+      properties:
+        budget_item_id:
+          type: string
+          format: uuid
+        forecast_months:
+          type: integer
+          minimum: 1
+          maximum: 12
+          default: 3
+        include_scenarios:
+          type: boolean
+          default: true
+
+    ForecastResult:
+      type: object
+      required:
+        - budget_item_id
+        - predictions
+      properties:
+        budget_item_id:
+          type: string
+          format: uuid
+        budget_item_name:
+          type: string
+        predictions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ForecastPrediction'
+        scenarios:
+          type: object
+          properties:
+            optimistic:
+              type: array
+              items:
+                $ref: '#/components/schemas/ForecastPrediction'
+            conservative:
+              type: array
+              items:
+                $ref: '#/components/schemas/ForecastPrediction'
+        over_budget_risk:
+          type: boolean
+          description: 예산 초과 위험 여부
+        risk_details:
+          type: string
+          description: 위험 상세 설명
+        generated_at:
+          type: string
+          format: date-time
+
+    ForecastPrediction:
+      type: object
+      required:
+        - period
+        - predicted_amount
+        - confidence_80
+        - confidence_95
+      properties:
+        period:
+          type: string
+          example: "2026-04"
+        predicted_amount:
+          type: number
+          format: decimal
+        confidence_80:
+          type: object
+          properties:
+            lower:
+              type: number
+              format: decimal
+            upper:
+              type: number
+              format: decimal
+        confidence_95:
+          type: object
+          properties:
+            lower:
+              type: number
+              format: decimal
+            upper:
+              type: number
+              format: decimal
+
+    ForecastResultList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ForecastResult'
+
+    ForecastError:
+      type: object
+      properties:
+        error:
+          type: string
+        reason:
+          type: string
+          example: "Insufficient data: requires at least 6 months of execution history"
+        required_data_months:
+          type: integer
+
+    BudgetAlert:
+      type: object
+      required:
+        - type
+        - message
+        - severity
+      properties:
+        type:
+          type: string
+          enum: [OVER_BUDGET_RISK, DATA_INTEGRITY, EXECUTION_SPIKE]
+        message:
+          type: string
+        severity:
+          type: string
+          enum: [INFO, WARNING, CRITICAL]
+        budget_item_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+
+    IntegrityCheckResult:
+      type: object
+      required:
+        - status
+        - checked_at
+      properties:
+        status:
+          type: string
+          enum: [PASSED, FAILED]
+        checked_at:
+          type: string
+          format: date-time
+        issues:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+              description:
+                type: string
+              affected_items:
+                type: array
+                items:
+                  type: string
+                  format: uuid
